@@ -1,0 +1,15 @@
+Description: Use pymysql as the default mysql dialect.
+Author: Corey Bryant <corey.bryant@canonical.com>
+Forwarded: not-needed
+
+--- a/lib/sqlalchemy/dialects/mysql/__init__.py
++++ b/lib/sqlalchemy/dialects/mysql/__init__.py
+@@ -10,7 +10,7 @@ from . import base, mysqldb, oursql, \
+     gaerdbms, cymysql
+ 
+ # default dialect
+-base.dialect = mysqldb.dialect
++base.dialect = pymysql.dialect
+ 
+ from .base import \
+     BIGINT, BINARY, BIT, BLOB, BOOLEAN, CHAR, DATE, DATETIME, \

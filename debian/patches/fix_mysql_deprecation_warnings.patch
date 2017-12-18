@@ -1,0 +1,101 @@
+Backport of:
+
+From 71c9b49141872f33773d905072a554a923d505ea Mon Sep 17 00:00:00 2001
+From: Daniel Thorell <(none)>
+Date: Fri, 20 Oct 2017 12:59:55 -0400
+Subject: [PATCH] Remove deprecation warnings mysql5 7 20
+
+MySQL 5.7.20 now warns for use of the @tx_isolation variable; a version
+check is now performed and uses @transaction_isolation instead
+to prevent this warning.
+
+For 1.1, also backport our_warn() test fixture fix from
+9f0fb6c601 1.2 branch.
+
+(cherry picked from commit 41cfe44b5e5806b3d3b13949e41dbb347bfa29e1)
+Co-authored by: Mike Bayer <mike_mp@zzzcomputing.com>
+Fixes: #4120
+Pull-request: https://github.com/zzzeek/sqlalchemy/pull/391
+Change-Id: I4d2e04df760c5351a71dde8b32145cdc69fa6115
+---
+ doc/build/changelog/unreleased_11/4120.rst |  8 ++++++++
+ lib/sqlalchemy/dialects/mysql/base.py      |  9 ++++++++-
+ lib/sqlalchemy/testing/assertions.py       | 16 ++++++++++++----
+ 3 files changed, 28 insertions(+), 5 deletions(-)
+ create mode 100644 doc/build/changelog/unreleased_11/4120.rst
+
+#diff --git a/doc/build/changelog/unreleased_11/4120.rst b/doc/build/changelog/unreleased_11/4120.rst
+#new file mode 100644
+#index 0000000..e84c1ac
+#--- /dev/null
+#+++ b/doc/build/changelog/unreleased_11/4120.rst
+#@@ -0,0 +1,8 @@
+#+.. change::
+#+    :tags: bug, mysql
+#+    :tickets: 4120
+#+    :versions: 1.2.0b4
+#+
+#+    MySQL 5.7.20 now warns for use of the @tx_isolation variable; a version
+#+    check is now performed and uses @transaction_isolation instead
+#+    to prevent this warning.
+Index: sqlalchemy-1.1.9+ds1/lib/sqlalchemy/dialects/mysql/base.py
+===================================================================
+--- sqlalchemy-1.1.9+ds1.orig/lib/sqlalchemy/dialects/mysql/base.py	2017-11-03 14:13:23.153741220 -0400
++++ sqlalchemy-1.1.9+ds1/lib/sqlalchemy/dialects/mysql/base.py	2017-11-03 14:14:03.666268059 -0400
+@@ -1543,7 +1543,10 @@ class MySQLDialect(default.DefaultDialec
+ 
+     def get_isolation_level(self, connection):
+         cursor = connection.cursor()
+-        cursor.execute('SELECT @@tx_isolation')
++        if self._is_mysql and self.server_version_info >= (5, 7, 20):
++            cursor.execute('SELECT @@transaction_isolation')
++        else:
++            cursor.execute('SELECT @@tx_isolation')
+         val = cursor.fetchone()[0]
+         cursor.close()
+         if util.py3k and isinstance(val, bytes):
+@@ -1686,6 +1689,10 @@ class MySQLDialect(default.DefaultDialec
+         return 'MariaDB' in self.server_version_info
+ 
+     @property
++    def _is_mysql(self):
++        return 'MariaDB' not in self.server_version_info
++
++    @property
+     def _supports_cast(self):
+         return self.server_version_info is None or \
+             self.server_version_info >= (4, 0, 2)
+Index: sqlalchemy-1.1.9+ds1/lib/sqlalchemy/testing/assertions.py
+===================================================================
+--- sqlalchemy-1.1.9+ds1.orig/lib/sqlalchemy/testing/assertions.py	2017-11-03 14:13:23.153741220 -0400
++++ sqlalchemy-1.1.9+ds1/lib/sqlalchemy/testing/assertions.py	2017-11-03 14:13:23.149741167 -0400
+@@ -130,9 +130,17 @@ def _expect_warnings(exc_cls, messages,
+ 
+     real_warn = warnings.warn
+ 
+-    def our_warn(msg, exception, *arg, **kw):
+-        if not issubclass(exception, exc_cls):
+-            return real_warn(msg, exception, *arg, **kw)
++    def our_warn(msg, *arg, **kw):
++        if isinstance(msg, exc_cls):
++            exception = msg
++            msg = str(exception)
++        elif arg:
++            exception = arg[0]
++        else:
++            exception = None
++
++        if not exception or not issubclass(exception, exc_cls):
++            return real_warn(msg, *arg, **kw)
+ 
+         if not filters:
+             return
+@@ -143,7 +151,7 @@ def _expect_warnings(exc_cls, messages,
+                 seen.discard(filter_)
+                 break
+         else:
+-            real_warn(msg, exception, *arg, **kw)
++            real_warn(msg, *arg, **kw)
+ 
+     with mock.patch("warnings.warn", our_warn):
+         yield

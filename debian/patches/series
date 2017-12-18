@@ -1,0 +1,3 @@
+0001-disable_intersphinx-module.patch
+pymysql-replacement.patch
+fix_mysql_deprecation_warnings.patch
